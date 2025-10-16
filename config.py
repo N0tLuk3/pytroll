@@ -43,4 +43,4 @@ POPUP_QUOTES = [
 
 POPUP_PERCENT = 5.0
 
-POPUP_API_URL = "https://notluke.de/pytroll/api"
+POPUP_API_URL = "https://pytroll.notluke.de/api/popup"
