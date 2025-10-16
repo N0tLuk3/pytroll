@@ -1,29 +1,27 @@
+import ctypes
 import random
 import threading
-import ctypes
-import io
-import base64
-from tkinter import Tk, Label
+import time
+from tkinter import Tk, Label, PhotoImage, messagebox
 from PIL import Image, ImageTk, ImageDraw
 import keyboard
 import pystray
-import sys
-import config
-import time
+import io
+import base64
 import pyautogui
-import random
-
-
+import requests
+import config  # deine config.py
 
 # --- Globale Variablen ---
 buffer = ""
-running = True  # Stop-Flag für Keyboard-Hook
+running = True
+last_mouse_pos = pyautogui.position()
 
 # --- Kek-Bild anzeigen ---
 def show_random_image():
     try:
-        b64_data = random.choice(config.IMAGE_B64_LIST)
-        img_data = base64.b64decode(b64_data)
+        b64_img = random.choice(config.IMAGE_B64_LIST)
+        img_data = base64.b64decode(b64_img)
         img = Image.open(io.BytesIO(img_data))
 
         root = Tk()
@@ -45,7 +43,7 @@ def show_random_image():
         root.after(1500, root.destroy)
         root.mainloop()
     except Exception as e:
-        pass  # Fehler ignorieren
+        print(f"Fehler beim Anzeigen des Bildes: {e}")
 
 # --- Buffer aktualisieren ---
 def update_buffer(c):
@@ -57,9 +55,9 @@ def update_buffer(c):
     if "kek" in buffer:
         if random.randint(0, 99) < config.KEK_SHOW_PERCENT:
             show_random_image()
-        buffer = ""  # Puffer zurücksetzen, damit nicht sofort erneut getriggert wird
+        buffer = ""
 
-# --- Callback für Tastendruck ---
+# --- Keyboard Callback ---
 def on_key_event(event):
     global buffer
     c = event.name
@@ -85,15 +83,28 @@ def on_key_event(event):
 
     update_buffer(c)
 
-# --- Keyboard Hook starten ---
 def start_hook():
     keyboard.hook(on_key_event)
     while running:
-        time.sleep(0.1)  # Kurzes Sleep, nicht blockierend
+        time.sleep(0.1)
 
-# --- Maus Movement ---
-last_mouse_pos = pyautogui.position()
+# --- Tray-App ---
+def create_tray_app():
+    icon_image = Image.new('RGB', (64, 64), color='blue')
+    d = ImageDraw.Draw(icon_image)
+    d.text((10, 20), "N→M", fill='white')
 
+    def on_exit(icon, item):
+        global running
+        running = False
+        keyboard.unhook_all()
+        icon.stop()
+
+    menu = pystray.Menu(pystray.MenuItem('Beenden', on_exit))
+    icon = pystray.Icon("NtoMModifier", icon_image, "N zu M Modifier", menu)
+    threading.Thread(target=icon.run, daemon=True).start()
+
+# --- Maus-Trolling ---
 def mouse_troll_thread():
     global last_mouse_pos, running
     while running:
@@ -102,7 +113,6 @@ def mouse_troll_thread():
 
         # Prüfen, ob Maus bewegt wurde
         if (current_pos.x, current_pos.y) != (last_mouse_pos.x, last_mouse_pos.y):
-            # Maus bewegt sich → Wahrscheinlichkeiten prüfen
             # 5% Zufallsbewegung
             if random.randint(0, 99) < config.MOUSE_RANDOM_MOVE_PERCENT:
                 dx = random.choice([-1, 1]) * random.randint(*config.MOUSE_RANDOM_MOVE_RANGE)
@@ -118,33 +128,32 @@ def mouse_troll_thread():
 
         last_mouse_pos = current_pos
 
-# --- Tray-App ---
-def create_tray_app():
-    icon_image = Image.new('RGB', (64, 64), color='blue')
-    d = ImageDraw.Draw(icon_image)
-    d.text((10, 20), "N→M", fill='white')
-
-    def on_exit(icon, item):
-        global running
-        running = False  # Hook-Thread beenden
-        keyboard.unhook_all()
-        icon.stop()
-        sys.exit()
-
-    menu = pystray.Menu(pystray.MenuItem('Beenden', on_exit))
-    icon = pystray.Icon("NtoMModifier", icon_image, "N zu M Modifier", menu)
-    threading.Thread(target=icon.run, daemon=True).start()
+# --- API Popup Thread ---
+def api_popup_thread():
+    global running
+    while running:
+        try:
+            response = requests.get(config.POPUP_API_URL, timeout=5)
+            if response.status_code == 200:
+                if random.randint(0, 99) < config.POPUP_PERCENT:
+                    quote = random.choice(config.POPUP_QUOTES)
+                    threading.Thread(target=lambda: messagebox.showinfo("Info", quote)).start()
+        except Exception:
+            pass
+        for _ in range(60):
+            if not running:
+                break
+            time.sleep(1)
 
 # --- Main ---
 if __name__ == "__main__":
     create_tray_app()
 
-    # Keyboard-Hook Thread
-    hook_thread = threading.Thread(target=start_hook, daemon=True)
-    hook_thread.start()
+    # Threads starten
+    threading.Thread(target=start_hook, daemon=True).start()
+    threading.Thread(target=mouse_troll_thread, daemon=True).start()
+    threading.Thread(target=api_popup_thread, daemon=True).start()
 
-    # Maus-Troll Thread
-    mouse_thread = threading.Thread(target=mouse_troll_thread, daemon=True)
-    mouse_thread.start()
-
-    hook_thread.join()
+    # Keep main thread alive
+    while running:
+        time.sleep(0.5)

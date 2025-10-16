@@ -35,3 +35,12 @@ MOUSE_JUMP_BOTTOMRIGHT_PERCENT = 1.0
 
 # Überprüfungsintervall für Mausbewegungen (Sekunden)
 MOUSE_CHECK_INTERVAL = 2.0
+
+# Sprüche für Popup
+POPUP_QUOTES = [
+    "Du bist ein Kek",
+]
+
+POPUP_PERCENT = 5.0
+
+POPUP_API_URL = "https://notluke.de/pytroll/api"
