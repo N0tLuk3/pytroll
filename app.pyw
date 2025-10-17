@@ -3,6 +3,7 @@ import random
 import threading
 import time
 from tkinter import Tk, Label, PhotoImage, messagebox
+import tkinter.messagebox as messagebox
 from PIL import Image, ImageTk, ImageDraw
 import keyboard
 import pystray
@@ -128,31 +129,35 @@ def mouse_troll_thread():
 
         last_mouse_pos = current_pos
 
-# --- API Popup Thread ---
-def api_popup_thread():
-    global running
-    while running:
-        try:
-            response = requests.get(config.POPUP_API_URL, timeout=5)
-            if response.status_code == 200:
-                if random.randint(0, 99) < config.POPUP_PERCENT:
-                    quote = random.choice(config.POPUP_QUOTES)
-                    threading.Thread(target=lambda: messagebox.showinfo("Info", quote)).start()
-        except Exception:
-            pass
-        for _ in range(60):
-            if not running:
-                break
-            time.sleep(1)
+# --- Popup-Troll ---
+def popup_troll():
+    # Beim Start prüfen, ob Popup-Troll aktiviert wird
+    if random.random() >= (config.POPUP_INITIAL_PROBABILITY / 100.0):
+        # Nicht aktiviert → Funktion beendet sich
+        print("Popup-Troll: Nicht aktiviert (Chance verpasst).")
+        return
 
-# --- Main ---
+    print("Popup-Troll: Aktiviert! Es werden Popups angezeigt.")
+    count = 0
+    while count < config.POPUP_MAX_COUNT:
+        time.sleep(config.POPUP_INTERVAL_SECONDS)
+        message = random.choice(config.POPUP_MESSAGES)
+        try:
+            root = Tk()
+            root.withdraw()
+            messagebox.showinfo("Pytroll", message)
+            root.destroy()
+            count += 1
+        except Exception as e:
+            print(f"Fehler beim Anzeigen des Popups: {e}")
+            break
+
 if __name__ == "__main__":
     create_tray_app()
 
-    # Threads starten
-    threading.Thread(target=start_hook, daemon=True).start()
+    threading.Thread(target=popup_troll, daemon=True).start()
     threading.Thread(target=mouse_troll_thread, daemon=True).start()
-    threading.Thread(target=api_popup_thread, daemon=True).start()
+    start_hook()
 
     # Keep main thread alive
     while running:
