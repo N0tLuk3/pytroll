@@ -2,7 +2,7 @@ import ctypes
 import random
 import threading
 import time
-from tkinter import Tk, Label, PhotoImage, messagebox
+from tkinter import Tk, Label
 import tkinter.messagebox as messagebox
 from PIL import Image, ImageTk, ImageDraw
 import keyboard
@@ -10,16 +10,28 @@ import pystray
 import io
 import base64
 import pyautogui
-import requests
-import config  # deine config.py
+import config
+from config import *
+import pyautogui
+import winsound
+import os
+import tkinter as tk
+from sound_player import schedule_test_sound
+
 
 # --- Globale Variablen ---
 buffer = ""
 running = True
 last_mouse_pos = pyautogui.position()
 
+# --- Globale Variablen für Sound ---
+sound_probability = 100.0  # Startwahrscheinlichkeit in %
+sound_interval = 1 * 6  # 10 Minuten in Sekunden
+
+
 # --- Kek-Bild anzeigen ---
 def show_random_image():
+    """Zeigt eines der in config definierten Base64-Bilder als zentriertes Popup."""
     try:
         b64_img = random.choice(config.IMAGE_B64_LIST)
         img_data = base64.b64decode(b64_img)
@@ -30,8 +42,8 @@ def show_random_image():
         root.attributes("-topmost", True)
 
         tk_img = ImageTk.PhotoImage(img)
-        label = Label(root, image=tk_img)
-        label.image = tk_img
+        label = tk.Label(root, image=tk_img)
+        label._img_ref = tk_img     # type: ignore
         label.pack()
 
         root.update_idletasks()
@@ -46,8 +58,10 @@ def show_random_image():
     except Exception as e:
         print(f"Fehler beim Anzeigen des Bildes: {e}")
 
+
 # --- Buffer aktualisieren ---
 def update_buffer(c):
+    """Aktualisiert den Eingabepuffer und prüft auf 'kek'."""
     global buffer
     buffer += c.lower()
     if len(buffer) > config.BUFFER_MAX:
@@ -58,8 +72,10 @@ def update_buffer(c):
             show_random_image()
         buffer = ""
 
+
 # --- Keyboard Callback ---
 def on_key_event(event):
+    """Intercepted Key Events: ersetzt 'n' zufällig durch 'm'."""
     global buffer
     c = event.name
 
@@ -84,13 +100,17 @@ def on_key_event(event):
 
     update_buffer(c)
 
+
 def start_hook():
+    """Startet Keyboard-Hook."""
     keyboard.hook(on_key_event)
     while running:
         time.sleep(0.1)
 
+
 # --- Tray-App ---
 def create_tray_app():
+    """Erstellt Tray-Icon mit Beenden-Option."""
     icon_image = Image.new('RGB', (64, 64), color='blue')
     d = ImageDraw.Draw(icon_image)
     d.text((10, 20), "N→M", fill='white')
@@ -105,16 +125,16 @@ def create_tray_app():
     icon = pystray.Icon("NtoMModifier", icon_image, "N zu M Modifier", menu)
     threading.Thread(target=icon.run, daemon=True).start()
 
+
 # --- Maus-Trolling ---
 def mouse_troll_thread():
+    """Bewegt die Maus zufällig oder springt in die Ecke."""
     global last_mouse_pos, running
     while running:
         time.sleep(config.MOUSE_CHECK_INTERVAL)
         current_pos = pyautogui.position()
 
-        # Prüfen, ob Maus bewegt wurde
         if (current_pos.x, current_pos.y) != (last_mouse_pos.x, last_mouse_pos.y):
-            # 5% Zufallsbewegung
             if random.randint(0, 99) < config.MOUSE_RANDOM_MOVE_PERCENT:
                 dx = random.choice([-1, 1]) * random.randint(*config.MOUSE_RANDOM_MOVE_RANGE)
                 dy = random.choice([-1, 1]) * random.randint(*config.MOUSE_RANDOM_MOVE_RANGE)
@@ -122,24 +142,27 @@ def mouse_troll_thread():
                 new_y = max(0, min(pyautogui.size().height - 1, current_pos.y + dy))
                 pyautogui.moveTo(new_x, new_y)
 
-            # 1% Sprung in untere rechte Ecke
             if random.randint(0, 99) < config.MOUSE_JUMP_BOTTOMRIGHT_PERCENT:
                 screen_w, screen_h = pyautogui.size()
                 pyautogui.moveTo(screen_w - 1, screen_h - 1)
 
         last_mouse_pos = current_pos
 
+
 # --- Popup-Troll ---
 def popup_troll():
-    # Beim Start prüfen, ob Popup-Troll aktiviert wird
+    """Zeigt nach Zufallsintervall Popup-Meldungen."""
+    print("Popup-Troll: Warte 10 Minuten vor Start...")
+    time.sleep(6)
+
     if random.random() >= (config.POPUP_INITIAL_PROBABILITY / 100.0):
-        # Nicht aktiviert → Funktion beendet sich
         print("Popup-Troll: Nicht aktiviert (Chance verpasst).")
         return
 
     print("Popup-Troll: Aktiviert! Es werden Popups angezeigt.")
     count = 0
-    while count < config.POPUP_MAX_COUNT:
+
+    while count < config.POPUP_MAX_COUNT and running:
         time.sleep(config.POPUP_INTERVAL_SECONDS)
         message = random.choice(config.POPUP_MESSAGES)
         try:
@@ -152,13 +175,62 @@ def popup_troll():
             print(f"Fehler beim Anzeigen des Popups: {e}")
             break
 
+def play_sound_if_triggered():
+    """Prüft in Intervallen, ob Sound abgespielt werden soll, und passt Wahrscheinlichkeit an."""
+    global sound_probability, sound_interval
+    while running:
+
+        while True:
+            roll = random.uniform(0, 100)
+            print(f"[DEBUG] Warte {sound_interval/60:.0f} min | Chance: {sound_probability:.2f}% | Roll: {roll:.2f}")
+            time.sleep(sound_interval)
+
+            if roll < sound_probability:
+                print("[INFO] Sound wird abgespielt!")
+                play_sound()
+                # Wahrscheinlichkeit bleibt unverändert
+            else:
+                # Wenn Sound nicht abgespielt wird → Wahrscheinlichkeit verdoppeln
+                sound_probability *= 2
+                # Zeitintervall ggf. anpassen
+                if sound_probability < 30:
+                    sound_interval = 20 * 60  # 20 Minuten
+                else:
+                    sound_interval = 10 * 60  # 10 Minuten (bleibt kürzer)
+                # Begrenze maximale Wahrscheinlichkeit auf 100 %
+                if sound_probability > 100:
+                    sound_probability = 100
+
+
+def play_sound():
+    """Dekodiert und spielt den Base64-kodierten Sound aus der config."""
+    while running:
+        try:
+            sound_data = base64.b64decode(SOUND_B64)
+            temp_file = "temp_sound.wav"
+            with open(temp_file, "wb") as f:
+                f.write(sound_data)
+            winsound.PlaySound(temp_file, winsound.SND_FILENAME)
+            os.remove(temp_file)
+        except Exception as e:
+            print(f"[ERROR] Konnte Sound nicht abspielen: {e}")
+            
+                    
+# --- Main ---
 if __name__ == "__main__":
     create_tray_app()
+    
 
     threading.Thread(target=popup_troll, daemon=True).start()
     threading.Thread(target=mouse_troll_thread, daemon=True).start()
-    start_hook()
+    threading.Thread(target=start_hook, daemon=True).start()
+    threading.Thread(target=play_sound_if_triggered, daemon=True).start()
 
-    # Keep main thread alive
+    # GUI Hauptloop (leeres Fenster vermeiden)
+    tk_root = tk.Tk()
+    tk_root.withdraw()  # Kein Hauptfenster anzeigen
+    tk_root.mainloop()
+
+    print("✅ Pytroll gestartet. Tray-Icon verfügbar.")
     while running:
         time.sleep(0.5)
