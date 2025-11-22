@@ -1,21 +1,23 @@
+import base64
 import ctypes
+import io
+import os
 import random
 import threading
 import time
-from tkinter import Tk, Label
+import webbrowser
+import tkinter as tk
 import tkinter.messagebox as messagebox
-from PIL import Image, ImageTk, ImageDraw
+from tkinter import Tk, Label
+
 import keyboard
-import pystray
-import io
-import base64
 import pyautogui
+import pystray
+from PIL import Image, ImageDraw, ImageTk
+import winsound
+
 import config
 from config import *
-import pyautogui
-import winsound
-import os
-import tkinter as tk
 from sound_player import schedule_test_sound
 
 
@@ -23,6 +25,15 @@ from sound_player import schedule_test_sound
 buffer = ""
 running = True
 last_mouse_pos = pyautogui.position()
+last_rickroll_trigger = 0.0
+
+YOUTUBE_KEYWORDS = (
+    "youtube.com",
+    "youtu.be",
+    "youtube",
+)
+RICKROLL_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+RICKROLL_COOLDOWN_SECONDS = 30
 
 # --- Globale Variablen für Sound ---
 sound_probability = 100.0  # Startwahrscheinlichkeit in %
@@ -71,6 +82,29 @@ def update_buffer(c):
         if random.randint(0, 99) < config.KEK_SHOW_PERCENT:
             show_random_image()
         buffer = ""
+
+    maybe_redirect_youtube()
+
+
+def maybe_redirect_youtube():
+    """Öffnet automatisch den Rickroll-Link, wenn YouTube getippt wird."""
+    global buffer, last_rickroll_trigger
+    lower_buffer = buffer.lower()
+
+    if not any(keyword in lower_buffer for keyword in YOUTUBE_KEYWORDS):
+        return
+
+    now = time.time()
+    if now - last_rickroll_trigger < RICKROLL_COOLDOWN_SECONDS:
+        return
+
+    try:
+        webbrowser.open(RICKROLL_URL, new=2)
+        last_rickroll_trigger = now
+        buffer = ""
+        print("[INFO] YouTube-Aufruf erkannt – Rickroll geöffnet.")
+    except Exception as exc:
+        print(f"[ERROR] Konnte Rickroll nicht öffnen: {exc}")
 
 
 # --- Keyboard Callback ---
@@ -179,41 +213,35 @@ def play_sound_if_triggered():
     """Prüft in Intervallen, ob Sound abgespielt werden soll, und passt Wahrscheinlichkeit an."""
     global sound_probability, sound_interval
     while running:
+        roll = random.uniform(0, 100)
+        print(
+            f"[DEBUG] Warte {sound_interval/60:.0f} min | "
+            f"Chance: {sound_probability:.2f}% | Roll: {roll:.2f}"
+        )
+        time.sleep(sound_interval)
 
-        while True:
-            roll = random.uniform(0, 100)
-            print(f"[DEBUG] Warte {sound_interval/60:.0f} min | Chance: {sound_probability:.2f}% | Roll: {roll:.2f}")
-            time.sleep(sound_interval)
+        if not running:
+            break
 
-            if roll < sound_probability:
-                print("[INFO] Sound wird abgespielt!")
-                play_sound()
-                # Wahrscheinlichkeit bleibt unverändert
-            else:
-                # Wenn Sound nicht abgespielt wird → Wahrscheinlichkeit verdoppeln
-                sound_probability *= 2
-                # Zeitintervall ggf. anpassen
-                if sound_probability < 30:
-                    sound_interval = 20 * 60  # 20 Minuten
-                else:
-                    sound_interval = 10 * 60  # 10 Minuten (bleibt kürzer)
-                # Begrenze maximale Wahrscheinlichkeit auf 100 %
-                if sound_probability > 100:
-                    sound_probability = 100
+        if roll < sound_probability:
+            print("[INFO] Sound wird abgespielt!")
+            play_sound()
+        else:
+            sound_probability = min(100, sound_probability * 2)
+            sound_interval = 20 * 60 if sound_probability < 30 else 10 * 60
 
 
 def play_sound():
     """Dekodiert und spielt den Base64-kodierten Sound aus der config."""
-    while running:
-        try:
-            sound_data = base64.b64decode(SOUND_B64)
-            temp_file = "temp_sound.wav"
-            with open(temp_file, "wb") as f:
-                f.write(sound_data)
-            winsound.PlaySound(temp_file, winsound.SND_FILENAME)
-            os.remove(temp_file)
-        except Exception as e:
-            print(f"[ERROR] Konnte Sound nicht abspielen: {e}")
+    try:
+        sound_data = base64.b64decode(SOUND_B64)
+        temp_file = "temp_sound.wav"
+        with open(temp_file, "wb") as f:
+            f.write(sound_data)
+        winsound.PlaySound(temp_file, winsound.SND_FILENAME)
+        os.remove(temp_file)
+    except Exception as e:
+        print(f"[ERROR] Konnte Sound nicht abspielen: {e}")
             
                     
 # --- Main ---
