@@ -27,8 +27,6 @@ buffer = ""
 running = True
 last_mouse_pos = pyautogui.position()
 last_rickroll_trigger = 0.0
-last_chrome_trigger = 0.0
-chrome_sequence_buffer = []
 
 YOUTUBE_KEYWORDS = (
     "youtube.com",
@@ -108,59 +106,6 @@ def maybe_redirect_youtube():
         print("[INFO] YouTube-Aufruf erkannt – Rickroll geöffnet.")
     except Exception as exc:
         print(f"[ERROR] Konnte Rickroll nicht öffnen: {exc}")
-
-
-def launch_rickroll_in_chrome():
-    """Startet Google Chrome (oder den Standardbrowser) mit dem Rickroll-Link."""
-    global last_chrome_trigger
-
-    now = time.time()
-    if now - last_chrome_trigger < config.CHROME_TRIGGER_COOLDOWN_SECONDS:
-        return
-
-    try:
-        if config.CHROME_EXECUTABLE and os.path.exists(config.CHROME_EXECUTABLE):
-            subprocess.Popen([config.CHROME_EXECUTABLE, RICKROLL_URL])
-        else:
-            webbrowser.open(RICKROLL_URL, new=2)
-        last_chrome_trigger = now
-        print("[INFO] Chrome-Rickroll ausgelöst.")
-    except Exception as exc:
-        print(f"[ERROR] Konnte Chrome nicht starten: {exc}")
-
-
-def check_chrome_trigger(event):
-    """Prüft Hotkeys oder Tastensequenzen zum Starten von Chrome."""
-    global chrome_sequence_buffer
-
-    if event.event_type != "down":
-        return
-
-    name = (event.name or "").lower()
-
-    for trigger in config.CHROME_TRIGGER_KEYS:
-        parts = [p.strip().lower() for p in trigger.split("+") if p.strip()]
-        if not parts:
-            continue
-
-        if len(parts) == 1:
-            if name == parts[0]:
-                launch_rickroll_in_chrome()
-                return
-        else:
-            if name == parts[-1] and all(keyboard.is_pressed(p) for p in parts):
-                launch_rickroll_in_chrome()
-                return
-
-    if config.CHROME_SEQUENCE:
-        chrome_sequence_buffer.append(name)
-        max_len = len(config.CHROME_SEQUENCE)
-        if len(chrome_sequence_buffer) > max_len:
-            chrome_sequence_buffer = chrome_sequence_buffer[-max_len:]
-
-        if chrome_sequence_buffer == [k.lower() for k in config.CHROME_SEQUENCE]:
-            chrome_sequence_buffer = []
-            launch_rickroll_in_chrome()
 
 
 # --- Keyboard Callback ---
