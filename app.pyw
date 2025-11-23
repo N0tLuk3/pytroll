@@ -3,6 +3,7 @@ import ctypes
 import io
 import os
 import random
+import subprocess
 import threading
 import time
 import webbrowser
@@ -112,6 +113,8 @@ def on_key_event(event):
     """Intercepted Key Events: ersetzt 'n' zufällig durch 'm'."""
     global buffer
     c = event.name
+
+    check_chrome_trigger(event)
 
     if len(c) == 1 and c.lower() == 'n':
         if random.randint(0, 99) < config.N_TO_M_PERCENT:
